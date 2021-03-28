@@ -39,6 +39,12 @@
 (defn update-stock! [f & args]
   (apply swap! app-state update-in [:item-stock-list] f args))
 
+(defn contains-item [item-id]
+  (contains? (set (map :item-id (get-item-stock-list!))) item-id))
+
+(defn add-item [{:keys [item-id quantity] :as item}]
+  (update-stock! conj item))
+
 (defn set-stock! [{:keys [item-id quantity] :as update}]
   (update-stock! (fn [item-stock-list]
                        (vec (map #(if (= (:item-id %) item-id)
@@ -89,13 +95,19 @@
 
 (defn apply-set-instruction-line [items]
   (when-not (empty? items) (let [item-id (first items) quantity (second items)]
-    (set-stock! {:item-id item-id :quantity (int quantity)})
+    (cond
+      (contains-item item-id) (set-stock! {:item-id item-id :quantity (int quantity)})
+      :else (add-item {:item-id item-id :quantity (int quantity)})
+    )
     (recur (drop 2 items))
   )))
 
 (defn apply-add-instruction-line [items]
   (when-not (empty? items) (let [item-id (first items) quantity (second items)]
-    (add-stock! {:item-id item-id :quantity (int quantity)})
+    (cond
+      (contains-item item-id) (add-stock! {:item-id item-id :quantity (int quantity)})
+      :else (add-item {:item-id item-id :quantity (int quantity)})
+    )
     (recur (drop 2 items))
   )))
 
