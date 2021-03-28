@@ -1,8 +1,9 @@
 This project was created using Reagent and Lein on Windows
 
 *How to run*:
-You can follow the instructions at https://leiningen.org
-Run Lein figwheel and open http://localhost:3449 on your browser.
+1) Follow the instructions at https://leiningen.org
+2) Go to ./stock-levels folder on the terminal
+3) Run "Lein figwheel" and open http://localhost:3449 on your browser.
 
 Notes about the application:
 1) It's not finished; it doesn't pass all the requirements of the assignment.
