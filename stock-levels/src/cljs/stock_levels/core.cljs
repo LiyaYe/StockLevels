@@ -5,7 +5,8 @@
    [reagent.session :as session]
    [reitit.frontend :as reitit]
    [clerk.core :as clerk]
-   [accountant.core :as accountant]))
+   [accountant.core :as accountant]
+   [clojure.string :as string]))
 
 ;; -------------------------
 ;; Routes
@@ -26,19 +27,36 @@
 ;; -------------------------
 ;; Page components
 
-(def app-state (reagent/atom {:item-stock-list [{:item-id "A" :quantity 1} {:item-id "B" :quantity 1} {:item-id "C" :quantity 2}]}))
+(def app-state (reagent/atom {:item-stock-list [{:item-id "A" :quantity 1} {:item-id "B" :quantity 1} {:item-id "C" :quantity 2}],
+                              :instruction-line "Sample instruction"}))
 
-(defn get-item-stock-list!
-  []
+(defn get-item-stock-list! []
   (:item-stock-list @app-state))
+
+(defn get-instruction-line! []
+  (:instruction-line @app-state))
 
 (defn update-stock! [f & args]
   (apply swap! app-state update-in [:item-stock-list] f args))
 
+(defn set-stock! [{:keys [item-id quantity] :as update}]
+  (update-stock! (fn [item-stock-list]
+                       (vec (map #(if (= (:item-id %) item-id)
+                                    (assoc % :quantity quantity) %)
+                                  item-stock-list)))
+                    update))
+
 (defn add-stock! [{:keys [item-id quantity] :as update}]
   (update-stock! (fn [item-stock-list]
-                       (vec (map #(if (= (:item-id %) "A")
+                       (vec (map #(if (= (:item-id %) item-id)
                                     (update-in % [:quantity] + quantity) %)
+                                  item-stock-list)))
+                    update))
+
+(defn order-stock! [{:keys [item-id quantity] :as update}]
+  (update-stock! (fn [item-stock-list]
+                       (vec (map #(if (= (:item-id %) item-id)
+                                    (update-in % [:quantity] - quantity) %)
                                   item-stock-list)))
                     update))
 
@@ -47,26 +65,82 @@
            :value @file
            :on-change #(reset! file (-> % .-target .-value))}])
 
+(defn instruction-line [line]
+  [:input {:type "text"
+           :value @line
+           :on-change #(reset! line (-> % .-target .-value))}])
+
+(defn submit-instruction! [instruction]
+  (swap! app-state assoc :instruction-line instruction))
+
 ;; (defn read-file [event]
 ;;   (let [reader (js/FileReader.)]
 ;;     #(reset! event (-> % .-target .-value))
 ;;     (println (.readAsText reader (-> event .-target .-files (first))))))
 
 (defn submit-file [file]
-  (let [reader (js/FileReader.)]
-    (.readAsText reader file)
-    (println "Submitted!" file)))
+  ;; (let [reader (js/FileReader.)]
+  ;;   (.readAsText reader file)
+    (println "Submitted!" file))
 
 (defn item [{:keys [item-id quantity]}]
   [:li {:name item-id :key item-id}
    [:span (str item-id ": " quantity)]])
+
+(defn apply-set-instruction-line [items]
+  (when-not (empty? items) (let [item-id (first items) quantity (second items)]
+    (set-stock! {:item-id item-id :quantity (int quantity)})
+    (recur (drop 2 items))
+  )))
+
+(defn apply-add-instruction-line [items]
+  (when-not (empty? items) (let [item-id (first items) quantity (second items)]
+    (add-stock! {:item-id item-id :quantity (int quantity)})
+    (recur (drop 2 items))
+  )))
+
+(defn apply-order-instruction-line [items]
+  (when-not (empty? items) (let [item-id (first items) quantity (second items)]
+    (order-stock! {:item-id item-id :quantity (int quantity)})
+    (recur (drop 2 items))
+  )))
+
+(defn get-instruction-words []
+  (string/split (get-instruction-line!) #"\s+")
+)
+
+(defn get-instruction-type []
+  (first (get-instruction-words))
+)
+
+(defn apply-instruction-line []
+  (let [instruction (get-instruction-type)]
+    (cond
+      (= instruction "set-stock") (apply-set-instruction-line (rest (get-instruction-words)))
+      (= instruction "add-stock") (apply-add-instruction-line (rest (get-instruction-words)))
+      (= instruction "order") (apply-order-instruction-line (drop 2 (get-instruction-words)))
+    )))
+
+(defn instruction-feeder []
+  (let [line (reagent/atom "")]
+    (fn []
+      [:div
+        [instruction-line line]
+        [:input {:type "button" :value "submit instruction" :on-click #(submit-instruction! @line)}]
+        [:input {:type "button" :value "apply" :on-click #(apply-instruction-line)}]
+        [:p (str (get-instruction-line!))]
+      ]
+    )))
 
 (defn main []
   (let [file (reagent/atom "")]
     (fn []
       [:div
         [atom-file file]
+        [:input {:type "button" :value "submit" :on-click #(submit-file file)}]
         [:input {:type "button" :value "increment stock" :on-click #(add-stock! {:item-id "A" :quantity 1})}]
+        [:input {:type "button" :value "set stock" :on-click #(set-stock! {:item-id "A" :quantity 1})}]
+        [:input {:type "button" :value "sub stock" :on-click #(order-stock! {:item-id "A" :quantity 1})}]
         [:h4 "Item Stock"]
         [:ul {:id "stock-list-items"}
           (for [i (:item-stock-list @app-state)]
@@ -78,6 +152,7 @@
       [:h1 "Stock Management"]
       [:h5 "Import instruction feed:"]
       [:div
+        [instruction-feeder]
         [main]
       ]
     ]
